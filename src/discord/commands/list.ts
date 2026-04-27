@@ -34,12 +34,12 @@ export function makeHandler(repo: Repo) {
     const user = i.options.getUser("user");
     const accs = await repo.listAccountsForGuild(i.guildId!, user?.id);
     if (accs.length === 0) {
-      await ephemeralReply(i, "Aucun compte lié sur ce serveur.");
+      await ephemeralReply(i, "Personne n'a osé link. Sage décision.");
       return;
     }
 
     const grouped = groupByDiscordUser(accs);
-    const lines: string[] = [];
+    const lines: string[] = ["**Liste des cobayes du serveur :**"];
     for (const [discordId, list] of grouped) {
       lines.push(`<@${discordId}>`);
       for (const a of list) lines.push(`  • ${formatAccount(a)}`);

@@ -29,7 +29,7 @@ const sampleMatch = (
 });
 
 describe("buildRoastPrompt", () => {
-  it("includes Discord mention, riot id, anglicism instruction, all stats", () => {
+  it("uses [user] placeholder (not the raw mention) and embeds all stats", () => {
     const r = buildRoastPrompt({
       discordUserMention: "<@123>",
       riotName: "Bob",
@@ -37,9 +37,11 @@ describe("buildRoastPrompt", () => {
       matches: [sampleMatch(), sampleMatch({ result: "loss", rr_change: -22 })],
     });
     expect(r.system).toMatch(/français/i);
-    expect(r.system).toMatch(/2e personne/i);
+    expect(r.system).toMatch(/tutoie/i);
+    expect(r.system).toMatch(/\[user\]/);
     expect(r.system).toMatch(/whiff|tilt|throw/i);
-    expect(r.user).toContain("<@123>");
+    expect(r.user).toContain("[user]");
+    expect(r.user).not.toContain("<@123>");
     expect(r.user).toContain("Bob#EUW");
     expect(r.user).toContain("Jett");
     expect(r.user).toContain("WIN");

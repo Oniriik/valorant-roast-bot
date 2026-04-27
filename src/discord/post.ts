@@ -1,4 +1,4 @@
-import { type Client, EmbedBuilder, TextChannel } from "discord.js";
+import { type Client, TextChannel } from "discord.js";
 import type { RoastPayload } from "../scheduler/tick.js";
 import { logger } from "../log.js";
 
@@ -10,13 +10,8 @@ export function makePoster(client: Client) {
         logger.warn("channel not text-based or missing", { channelId });
         return;
       }
-      const embed = new EmbedBuilder()
-        .setTitle(`🎯 Roast de ${payload.riotName}#${payload.riotTag}`)
-        .setDescription(payload.text)
-        .setColor(0xff4655);
       await ch.send({
-        content: `<@${payload.discordUserId}>`,
-        embeds: [embed],
+        content: payload.text,
         allowedMentions: { users: [payload.discordUserId] },
       });
     } catch (e) {

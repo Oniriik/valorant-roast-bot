@@ -23,11 +23,11 @@ export const data = new SlashCommandBuilder()
 export function makeHandler(repo: Repo) {
   return async (i: ChatInputCommandInteraction): Promise<void> => {
     if (!isAdmin(i)) {
-      await ephemeralReply(i, "❌ Réservé aux admins.");
+      await ephemeralReply(i, "❌ Réservé aux admins. Pas pour les civils.");
       return;
     }
     const ch = i.options.getChannel("channel", true);
     await repo.setRoastChannel(i.guildId!, ch.id);
-    await ephemeralReply(i, `✅ Roasts iront dans <#${ch.id}>.`);
+    await ephemeralReply(i, `📍 Channel des roasts mis à jour. Préparez l'infirmerie : <#${ch.id}>.`);
   };
 }

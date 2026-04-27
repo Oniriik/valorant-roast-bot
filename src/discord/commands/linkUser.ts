@@ -24,19 +24,20 @@ export const data = new SlashCommandBuilder()
 export function makeHandler(repo: Repo, henrik: HenrikClient) {
   return async (i: ChatInputCommandInteraction): Promise<void> => {
     if (!isAdmin(i)) {
-      await ephemeralReply(i, "❌ Réservé aux admins (Manage Guild).");
+      await ephemeralReply(i, "❌ Réservé aux admins (Manage Guild). Pas pour les civils.");
       return;
     }
     const user = i.options.getUser("user", true);
     const riot = i.options.getString("riot", true);
     const m = riot.match(/^(.+)#([^\s#]+)$/);
     if (!m) {
-      await ephemeralReply(i, "Format invalide. Attendu: `Name#TAG`.");
+      await ephemeralReply(i, "Format invalide. C'est `Name#TAG`, pas un mot de passe wifi.");
       return;
     }
     const [, name, tag] = m as [string, string, string];
 
     await i.deferReply({ flags: MessageFlags.Ephemeral });
+    await i.editReply("🕵️ Je vérifie que ce compte existe vraiment côté Riot, on sait jamais avec toi…");
 
     let account: { puuid: string; region: string; name: string; tag: string };
     try {
@@ -44,17 +45,19 @@ export function makeHandler(repo: Repo, henrik: HenrikClient) {
     } catch (e) {
       const err = e as { notFound?: boolean; rateLimited?: boolean };
       if (err.notFound) {
-        await i.editReply(`❌ Aucun compte Riot trouvé pour \`${name}#${tag}\`.`);
+        await i.editReply(`❌ Personne sous \`${name}#${tag}\`. Tu m'as fait perdre une requête API pour rien.`);
         return;
       }
       if (err.rateLimited) {
-        await i.editReply("Henrik rate-limited, réessaie dans une minute.");
+        await i.editReply("Henrik a sucké le serveur. Reviens dans une minute.");
         return;
       }
-      logger.error("link: getAccount failed", { err: String(e) });
-      await i.editReply(`Erreur Henrik: ${e instanceof Error ? e.message : String(e)}`);
+      logger.error("link-user: getAccount failed", { err: String(e) });
+      await i.editReply(`Erreur Henrik : ${e instanceof Error ? e.message : String(e)}`);
       return;
     }
+
+    await i.editReply(`📂 Allez, j'inscris <@${user.id}> au registre des stats à pleurer…`);
 
     try {
       await repo.createAccount({
@@ -66,16 +69,16 @@ export function makeHandler(repo: Repo, henrik: HenrikClient) {
         puuid: account.puuid,
       });
       await i.editReply(
-        `✅ Lié <@${user.id}> → \`${account.name}#${account.tag}\` (region ${account.region}, puuid \`${account.puuid.slice(0, 8)}…\`).`,
+        `✅ Affaire classée : <@${user.id}> ↔ \`${account.name}#${account.tag}\` (region ${account.region}). Bonne chance pour le coach.`,
       );
     } catch (e) {
       const code = (e as { code?: string })?.code;
       if (String(code) === "23505") {
-        await i.editReply("Ce compte est déjà lié sur ce serveur.");
+        await i.editReply("Ce compte est déjà lié ici. Une fois ça suffit largement.");
         return;
       }
       const msg = e instanceof Error ? e.message : String(e);
-      await i.editReply(`Erreur DB: ${msg}`);
+      await i.editReply(`Erreur DB : ${msg}`);
     }
   };
 }

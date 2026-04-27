@@ -21,12 +21,13 @@ export function makeHandler(repo: Repo, henrik: HenrikClient) {
     const riot = i.options.getString("riot", true);
     const m = riot.match(/^(.+)#([^\s#]+)$/);
     if (!m) {
-      await ephemeralReply(i, "Format invalide. Attendu: `Name#TAG`.");
+      await ephemeralReply(i, "Format invalide. C'est `Name#TAG`, pas un mot de passe wifi.");
       return;
     }
     const [, name, tag] = m as [string, string, string];
 
     await i.deferReply({ flags: MessageFlags.Ephemeral });
+    await i.editReply("📞 J'appelle Riot pour vérifier que t'existes vraiment…");
 
     let account;
     try {
@@ -34,17 +35,19 @@ export function makeHandler(repo: Repo, henrik: HenrikClient) {
     } catch (e) {
       const err = e as { notFound?: boolean; rateLimited?: boolean };
       if (err.notFound) {
-        await i.editReply(`❌ Aucun compte Riot trouvé pour \`${name}#${tag}\`.`);
+        await i.editReply(`❌ Aucun compte Riot trouvé pour \`${name}#${tag}\`. T'as inventé ton pseudo ?`);
         return;
       }
       if (err.rateLimited) {
-        await i.editReply("Henrik rate-limited, réessaie dans une minute.");
+        await i.editReply("Henrik a sucké le serveur. Reviens dans une minute.");
         return;
       }
       logger.error("link-me: getAccount failed", { err: String(e) });
-      await i.editReply(`Erreur Henrik: ${e instanceof Error ? e.message : String(e)}`);
+      await i.editReply(`Erreur Henrik : ${e instanceof Error ? e.message : String(e)}`);
       return;
     }
+
+    await i.editReply("💾 Je te rajoute à la liste des cas désespérés…");
 
     try {
       await repo.createAccount({
@@ -56,16 +59,16 @@ export function makeHandler(repo: Repo, henrik: HenrikClient) {
         puuid: account.puuid,
       });
       await i.editReply(
-        `✅ Compte lié : \`${account.name}#${account.tag}\` (region ${account.region}).`,
+        `✅ T'es lié : \`${account.name}#${account.tag}\` (region ${account.region}). Que ça serve à quelque chose.`,
       );
     } catch (e) {
       const code = (e as { code?: string })?.code;
       if (String(code) === "23505") {
-        await i.editReply("Ce compte est déjà lié sur ce serveur.");
+        await i.editReply("Ce compte est déjà lié sur ce serveur. Une fois ça suffit, j'aime pas la répétition.");
         return;
       }
       const msg = e instanceof Error ? e.message : String(e);
-      await i.editReply(`Erreur DB: ${msg}`);
+      await i.editReply(`Erreur DB : ${msg}`);
     }
   };
 }

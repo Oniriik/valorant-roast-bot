@@ -1,9 +1,16 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText } from "ai";
-import { buildRoastPrompt, type RoastInput } from "./prompt.js";
+import { buildRoastPrompt, USER_PLACEHOLDER, type RoastInput } from "./prompt.js";
 
 export interface RoastGenerator {
   generate(input: RoastInput): Promise<string>;
+}
+
+function substituteMention(text: string, mention: string): string {
+  // accept lossy variants the LLM might emit: [user], [USER], [ user ], _user_, *user*
+  return text
+    .replace(/\[\s*user\s*\]/gi, mention)
+    .replace(/\bUSER_MENTION\b/g, mention);
 }
 
 export class AISDKRoastGenerator implements RoastGenerator {
@@ -23,8 +30,20 @@ export class AISDKRoastGenerator implements RoastGenerator {
       temperature: 1,
       maxTokens: 600,
     });
-    const trimmed = text.trim();
+    let trimmed = text.trim();
     if (!trimmed) throw new Error("ai sdk returned empty response");
-    return trimmed.length > 1500 ? trimmed.slice(0, 1500) : trimmed;
+
+    // safety: if LLM ignored the placeholder and the mention isn't present, prepend it
+    trimmed = substituteMention(trimmed, input.discordUserMention);
+    if (!trimmed.includes(input.discordUserMention)) {
+      trimmed = `${input.discordUserMention} ${trimmed}`;
+    }
+
+    // hard cap juste sous la limite Discord plain-message de 2000
+    const HARD_LIMIT = 1900;
+    if (trimmed.length > HARD_LIMIT) trimmed = trimmed.slice(0, HARD_LIMIT - 1) + "…";
+    return trimmed;
   }
 }
+
+export { USER_PLACEHOLDER };

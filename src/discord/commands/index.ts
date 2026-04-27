@@ -22,17 +22,14 @@ export interface CommandDeps {
   roast: RoastGenerator;
 }
 
-export function attachInteractionHandler(
-  client: Client,
-  deps: CommandDeps,
-): void {
+export function attachInteractionHandler(client: Client, deps: CommandDeps): void {
   const handlers: Record<string, (i: ChatInputCommandInteraction) => Promise<void>> = {
     "link-me": linkMe.makeHandler(deps.repo, deps.henrik),
     "link-user": linkUser.makeHandler(deps.repo, deps.henrik),
     unlink: unlink.makeHandler(deps.repo),
     setchannel: setchannel.makeHandler(deps.repo),
     list: list.makeHandler(deps.repo),
-    roast: roast.makeHandler(deps.repo, deps.henrik, deps.roast),
+    roast: roast.makeHandler(deps),
   };
 
   const autocompleters: Record<string, (i: AutocompleteInteraction) => Promise<void>> = {
@@ -40,43 +37,50 @@ export function attachInteractionHandler(
     roast: roast.makeAutocomplete(deps.repo),
   };
 
-  client.on("interactionCreate", async (interaction: Interaction) => {
-    if (interaction.isAutocomplete()) {
-      const ac = autocompleters[interaction.commandName];
-      if (!ac) return;
-      try {
-        await ac(interaction);
-      } catch (e) {
-        logger.error("autocomplete failed", {
-          cmd: interaction.commandName,
-          err: String(e),
-        });
-        try {
-          await interaction.respond([]);
-        } catch {
-          // ignore
-        }
-      }
-      return;
-    }
+  const roastSelectHandler = roast.makeSelectHandler(deps);
+  const unlinkSelectHandler = unlink.makeSelectHandler(deps.repo);
 
-    if (!interaction.isChatInputCommand()) return;
-    const h = handlers[interaction.commandName];
-    if (!h) return;
+  client.on("interactionCreate", async (interaction: Interaction) => {
     try {
+      if (interaction.isAutocomplete()) {
+        const ac = autocompleters[interaction.commandName];
+        if (!ac) return;
+        try {
+          await ac(interaction);
+        } catch (e) {
+          logger.error("autocomplete failed", {
+            cmd: interaction.commandName,
+            err: String(e),
+          });
+          try {
+            await interaction.respond([]);
+          } catch {
+            // ignore
+          }
+        }
+        return;
+      }
+
+      if (interaction.isStringSelectMenu()) {
+        if (interaction.customId === roast.SELECT_CUSTOM_ID) {
+          await roastSelectHandler(interaction);
+        } else if (interaction.customId === unlink.SELECT_CUSTOM_ID) {
+          await unlinkSelectHandler(interaction);
+        }
+        return;
+      }
+
+      if (!interaction.isChatInputCommand()) return;
+      const h = handlers[interaction.commandName];
+      if (!h) return;
       await h(interaction);
     } catch (e) {
-      logger.error("command failed", {
-        cmd: interaction.commandName,
-        err: String(e),
-      });
+      logger.error("interaction failed", { err: String(e) });
       try {
-        if (interaction.replied || interaction.deferred) {
-          await interaction.followUp({
-            content: "Erreur interne.",
-            flags: MessageFlags.Ephemeral,
-          });
-        } else {
+        if (
+          interaction.isRepliable() &&
+          !(interaction.replied || interaction.deferred)
+        ) {
           await interaction.reply({
             content: "Erreur interne.",
             flags: MessageFlags.Ephemeral,

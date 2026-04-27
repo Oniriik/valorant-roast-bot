@@ -113,6 +113,7 @@ export async function runTickForAccount(
 
   let pending = acc.pending_match_count;
   let lastMatchId = acc.last_match_id ?? "";
+  let roastedThisTick = false;
 
   for (const m of fresh) {
     const e = mmrIdx.get(m.meta.id);
@@ -125,7 +126,7 @@ export async function runTickForAccount(
     pending += 1;
     lastMatchId = m.meta.id;
 
-    if (pending >= deps.threshold) {
+    if (!roastedThisTick && pending >= deps.threshold) {
       const guild = await deps.repo.getGuild(acc.guild_id);
       const channelId = guild?.roast_channel_id ?? null;
 
@@ -134,6 +135,7 @@ export async function runTickForAccount(
           acc: acc.id,
         });
         pending = 0;
+        roastedThisTick = true;
         await deps.repo.updateAccountAfterMatch(acc.id, lastMatchId, pending);
         continue;
       }
@@ -170,6 +172,7 @@ export async function runTickForAccount(
           discordUserId: acc.discord_user_id,
         });
         pending = 0;
+        roastedThisTick = true;
         await deps.repo.updateAccountAfterMatch(acc.id, lastMatchId, pending);
       } catch (e) {
         logger.error("roast/post failed → keep counter", {
