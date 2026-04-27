@@ -56,6 +56,7 @@ export class Repo {
     riotName: string;
     riotTag: string;
     region: string;
+    puuid: string;
   }): Promise<AccountRow> {
     await this.upsertGuild(input.guildId);
     const { data, error } = await this.sb
@@ -66,11 +67,28 @@ export class Repo {
         riot_name: input.riotName,
         riot_tag: input.riotTag,
         region: input.region,
+        puuid: input.puuid,
       })
       .select()
       .single();
     if (error) throw error;
     return data;
+  }
+
+  async updatePuuid(accountId: string, puuid: string, region: string): Promise<void> {
+    const { error } = await this.sb
+      .from("valorant_accounts")
+      .update({ puuid, region })
+      .eq("id", accountId);
+    if (error) throw error;
+  }
+
+  async updateRiotIdentity(accountId: string, name: string, tag: string): Promise<void> {
+    const { error } = await this.sb
+      .from("valorant_accounts")
+      .update({ riot_name: name, riot_tag: tag })
+      .eq("id", accountId);
+    if (error) throw error;
   }
 
   async deleteAccount(

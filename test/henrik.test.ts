@@ -1,19 +1,44 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { parseHenrikMatches } from "../src/valorant/henrik.js";
+import {
+  StoredMatchesResponse,
+  HenrikAccount,
+  CurrentMmrResponse,
+  MmrHistoryResponse,
+} from "../src/valorant/types.js";
 
-const raw = JSON.parse(readFileSync("test/fixtures/henrik-matches.json", "utf8"));
+function load(name: string) {
+  return JSON.parse(readFileSync(`test/fixtures/${name}.json`, "utf8"));
+}
 
-describe("parseHenrikMatches", () => {
-  it("returns array of validated matches", () => {
-    const out = parseHenrikMatches(raw);
-    expect(Array.isArray(out)).toBe(true);
-    expect(out.length).toBe(2);
-    expect(out[0]?.metadata.matchid).toBeTypeOf("string");
-    expect(out[0]?.players.all_players[0]?.character).toBe("Jett");
+describe("henrik zod schemas", () => {
+  it("parses stored-matches payload", () => {
+    const p = StoredMatchesResponse.parse(load("stored-matches"));
+    expect(p.status).toBe(200);
+    expect(p.data.length).toBeGreaterThan(0);
+    const m = p.data[0]!;
+    expect(m.meta.id).toBeTypeOf("string");
+    expect(m.stats.character.name).toBeTypeOf("string");
+    expect(m.stats.shots.head).toBeTypeOf("number");
   });
 
-  it("rejects malformed payload", () => {
-    expect(() => parseHenrikMatches({ status: 200 })).toThrow();
+  it("parses account payload", () => {
+    const p = HenrikAccount.parse(load("account"));
+    expect(p.data.puuid).toMatch(/-/);
+    expect(p.data.region).toBeTypeOf("string");
+  });
+
+  it("parses current mmr v2", () => {
+    const p = CurrentMmrResponse.parse(load("mmr-v2"));
+    expect(p.data.current_data.currenttierpatched).toBeTypeOf("string");
+    expect(p.data.current_data.elo).toBeTypeOf("number");
+  });
+
+  it("parses mmr-history", () => {
+    const p = MmrHistoryResponse.parse(load("mmr-history"));
+    expect(p.data.length).toBeGreaterThan(0);
+    const h = p.data[0]!;
+    expect(h.match_id).toBeTypeOf("string");
+    expect(typeof h.mmr_change_to_last_game).toBe("number");
   });
 });

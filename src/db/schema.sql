@@ -12,6 +12,7 @@ create table if not exists valorant_accounts (
   discord_user_id text not null,
   riot_name text not null,
   riot_tag text not null,
+  puuid text,
   region text not null default 'eu',
   pending_match_count int not null default 0,
   last_match_id text,
@@ -20,8 +21,12 @@ create table if not exists valorant_accounts (
   unique (guild_id, riot_name, riot_tag)
 );
 
+-- idempotent migration for existing databases
+alter table valorant_accounts add column if not exists puuid text;
+
 create index if not exists valorant_accounts_discord_user_id_idx on valorant_accounts (discord_user_id);
 create index if not exists valorant_accounts_guild_id_idx on valorant_accounts (guild_id);
+create index if not exists valorant_accounts_puuid_idx on valorant_accounts (puuid);
 
 create table if not exists matches (
   match_id text not null,

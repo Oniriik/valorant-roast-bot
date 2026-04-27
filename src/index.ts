@@ -8,7 +8,7 @@ import { attachInteractionHandler } from "./discord/commands/index.js";
 import { HttpHenrikClient } from "./valorant/henrik.js";
 import { AISDKRoastGenerator } from "./roast/generate.js";
 import { startScheduler } from "./scheduler/index.js";
-import { makePoster, resolvePuuidFromMatch } from "./discord/post.js";
+import { makePoster } from "./discord/post.js";
 
 async function main() {
   const cfg = loadConfig();
@@ -21,14 +21,15 @@ async function main() {
   const sb = makeSupabase(cfg);
   const repo = new Repo(sb);
 
+  const henrik = new HttpHenrikClient(cfg.henrikApiKey);
+  const roast = new AISDKRoastGenerator(cfg.openaiApiKey, cfg.openaiModel);
+
   const client = makeDiscordClient();
-  attachInteractionHandler(client, repo, cfg.defaultRegion);
+  attachInteractionHandler(client, { repo, henrik, roast });
 
   client.once("ready", (c) => logger.info("discord ready", { tag: c.user.tag }));
   await client.login(cfg.discordToken);
 
-  const henrik = new HttpHenrikClient(cfg.henrikApiKey);
-  const roast = new AISDKRoastGenerator(cfg.openaiApiKey, cfg.openaiModel);
   const post = makePoster(client);
 
   startScheduler(
@@ -39,7 +40,6 @@ async function main() {
       roast,
       post,
       threshold: cfg.roastThreshold,
-      resolvePuuid: async (m, name, tag) => resolvePuuidFromMatch(m, name, tag),
     },
     cfg.tickIntervalMinutes,
   );

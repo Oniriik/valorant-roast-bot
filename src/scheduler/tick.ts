@@ -1,8 +1,7 @@
 import type { Repo } from "../db/repo.js";
-import type { AccountRow } from "../db/types.js";
+import type { AccountRow, CurrentRankInfo } from "../db/types.js";
 import type { HenrikClient } from "../valorant/henrik.js";
-import type { HenrikMatchT } from "../valorant/types.js";
-import { summarizeMatch } from "../roast/summarize.js";
+import { buildMmrIndex, summarizeStoredMatch } from "../roast/summarize.js";
 import type { RoastGenerator } from "../roast/generate.js";
 import { logger } from "../log.js";
 
@@ -19,21 +18,41 @@ export interface TickDeps {
   roast: RoastGenerator;
   post: (channelId: string, payload: RoastPayload) => Promise<void>;
   threshold: number;
-  resolvePuuid: (m: HenrikMatchT, name: string, tag: string) => Promise<string>;
+}
+
+async function ensurePuuid(
+  acc: AccountRow,
+  deps: TickDeps,
+): Promise<{ puuid: string; region: string } | null> {
+  if (acc.puuid) return { puuid: acc.puuid, region: acc.region };
+  try {
+    const a = await deps.henrik.getAccount(acc.riot_name, acc.riot_tag);
+    await deps.repo.updatePuuid(acc.id, a.puuid, a.region);
+    logger.info("backfilled puuid", { id: acc.id });
+    return { puuid: a.puuid, region: a.region };
+  } catch (e) {
+    const err = e as { notFound?: boolean };
+    if (err.notFound) {
+      logger.warn("backfill: account not found, disabling", { id: acc.id });
+      await deps.repo.disableAccount(acc.id);
+    } else {
+      logger.warn("backfill: failed", { id: acc.id, err: String(e) });
+    }
+    return null;
+  }
 }
 
 export async function runTickForAccount(
   acc: AccountRow,
   deps: TickDeps,
 ): Promise<void> {
-  let matches: HenrikMatchT[];
+  const id = await ensurePuuid(acc, deps);
+  if (!id) return;
+  const { puuid, region } = id;
+
+  let storedMatches;
   try {
-    matches = await deps.henrik.getCompetitiveMatches(
-      acc.region,
-      acc.riot_name,
-      acc.riot_tag,
-      5,
-    );
+    storedMatches = await deps.henrik.getStoredMatches(region, puuid, "competitive", 5);
   } catch (e: unknown) {
     const err = e as { notFound?: boolean; rateLimited?: boolean };
     if (err.notFound) {
@@ -49,35 +68,62 @@ export async function runTickForAccount(
     return;
   }
 
-  if (matches.length === 0) return;
+  if (storedMatches.length === 0) return;
 
-  const ids = matches.map((m) => m.metadata.matchid);
+  // detect riot id rename via the most recent match
+  const latest = storedMatches[0]!;
+  const apiName = latest.stats.name;
+  const apiTag = latest.stats.tag;
+  if (apiName && apiTag && (apiName !== acc.riot_name || apiTag !== acc.riot_tag)) {
+    logger.info("detected riot id change → updating", {
+      id: acc.id,
+      from: `${acc.riot_name}#${acc.riot_tag}`,
+      to: `${apiName}#${apiTag}`,
+    });
+    try {
+      await deps.repo.updateRiotIdentity(acc.id, apiName, apiTag);
+      acc.riot_name = apiName;
+      acc.riot_tag = apiTag;
+    } catch (e) {
+      logger.warn("riot id update failed", { id: acc.id, err: String(e) });
+    }
+  }
+
+  const ids = storedMatches.map((m) => m.meta.id);
   const existing = await deps.repo.existingMatchIds(acc.id, ids);
-  const fresh = matches
-    .filter((m) => !existing.has(m.metadata.matchid))
-    .sort((a, b) => a.metadata.game_start - b.metadata.game_start);
+  const fresh = storedMatches
+    .filter((m) => !existing.has(m.meta.id))
+    .sort(
+      (a, b) => new Date(a.meta.started_at).getTime() - new Date(b.meta.started_at).getTime(),
+    );
 
   if (fresh.length === 0) return;
+
+  // fetch mmr-history once for RR enrichment of new matches
+  let mmrIdx: ReturnType<typeof buildMmrIndex> = new Map();
+  try {
+    const history = await deps.henrik.getMmrHistory(region, puuid);
+    mmrIdx = buildMmrIndex(history);
+  } catch (e) {
+    logger.warn("mmr-history fetch failed; matches will lack RR", {
+      id: acc.id,
+      err: String(e),
+    });
+  }
 
   let pending = acc.pending_match_count;
   let lastMatchId = acc.last_match_id ?? "";
 
   for (const m of fresh) {
-    let stats;
-    try {
-      const puuid = await deps.resolvePuuid(m, acc.riot_name, acc.riot_tag);
-      stats = summarizeMatch(m, puuid);
-    } catch (e) {
-      logger.warn("could not summarize match → skip", {
-        match: m.metadata.matchid,
-        err: String(e),
-      });
-      continue;
-    }
-
-    await deps.repo.insertMatch(acc.id, m.metadata.matchid, stats.played_at, stats);
+    const e = mmrIdx.get(m.meta.id);
+    const stats = summarizeStoredMatch(
+      m,
+      e?.rrChange ?? null,
+      e?.rankPatched ?? null,
+    );
+    await deps.repo.insertMatch(acc.id, m.meta.id, stats.played_at, stats);
     pending += 1;
-    lastMatchId = m.metadata.matchid;
+    lastMatchId = m.meta.id;
 
     if (pending >= deps.threshold) {
       const guild = await deps.repo.getGuild(acc.guild_id);
@@ -95,12 +141,27 @@ export async function runTickForAccount(
       const recent = await deps.repo.getRecentMatches(acc.id, deps.threshold);
       const matchStats = recent.map((r) => r.raw_stats);
 
+      let currentRank: CurrentRankInfo | null = null;
+      try {
+        const mmr = await deps.henrik.getCurrentMmr(region, puuid);
+        currentRank = {
+          tier: mmr.current_data.currenttierpatched,
+          elo: mmr.current_data.elo,
+          ranking_in_tier: mmr.current_data.ranking_in_tier,
+          mmr_change_to_last_game: mmr.current_data.mmr_change_to_last_game,
+          highest_tier: mmr.highest_rank?.patched_tier ?? null,
+        };
+      } catch (err) {
+        logger.warn("current-mmr fetch failed", { id: acc.id, err: String(err) });
+      }
+
       try {
         const text = await deps.roast.generate({
           discordUserMention: `<@${acc.discord_user_id}>`,
           riotName: acc.riot_name,
           riotTag: acc.riot_tag,
           matches: matchStats,
+          currentRank,
         });
         await deps.post(channelId, {
           text,
