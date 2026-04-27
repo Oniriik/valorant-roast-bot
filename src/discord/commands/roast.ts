@@ -17,8 +17,18 @@ import type { AccountRow, CurrentRankInfo } from "../../db/types.js";
 import { logger } from "../../log.js";
 import { ephemeralReply } from "../permissions.js";
 
-const COOLDOWN_MS = 5 * 60 * 1000;
+const COOLDOWN_MS = 60 * 60 * 1000;
 const lastRoastByAccount = new Map<string, number>();
+
+function formatRemaining(ms: number): string {
+  const totalSec = Math.ceil(ms / 1000);
+  if (totalSec >= 60) {
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return s > 0 ? `${m}min ${s}s` : `${m}min`;
+  }
+  return `${totalSec}s`;
+}
 
 const SELECT_PREFIX = "roast-pick";
 const SELECT_TTL_MS = 10 * 60 * 1000;
@@ -40,7 +50,7 @@ function purgeExpiredPicks(): void {
 
 export const data = new SlashCommandBuilder()
   .setName("roast")
-  .setDescription("Roast un user lié (cooldown 5 min, posté en public)")
+  .setDescription("Roast un user lié (cooldown 1h, posté en public)")
   .setDMPermission(false)
   .addUserOption((o) =>
     o.setName("user").setDescription("Cible du roast").setRequired(true),
@@ -194,12 +204,12 @@ async function executeRoast(
   }
 }
 
-function checkCooldown(accountId: string): { ok: true } | { ok: false; remainingSec: number } {
+function checkCooldown(accountId: string): { ok: true } | { ok: false; remaining: string } {
   const now = Date.now();
   const last = lastRoastByAccount.get(accountId) ?? 0;
   const elapsed = now - last;
   if (elapsed < COOLDOWN_MS) {
-    return { ok: false, remainingSec: Math.ceil((COOLDOWN_MS - elapsed) / 1000) };
+    return { ok: false, remaining: formatRemaining(COOLDOWN_MS - elapsed) };
   }
   return { ok: true };
 }
@@ -297,7 +307,7 @@ export function makeHandler(deps: RoastDeps) {
     if (!cd.ok) {
       await ephemeralReply(
         i,
-        `⏳ J'viens de le rouster, j'ai pas la voix pour deux. Reviens dans **${cd.remainingSec}s**.`,
+        `⏳ J'viens de le rouster, j'ai pas la voix pour deux. Reviens dans **${cd.remaining}**.`,
       );
       return;
     }
@@ -357,7 +367,7 @@ export function makeSelectHandler(deps: RoastDeps) {
     const cd = checkCooldown(account.id);
     if (!cd.ok) {
       await i.update({
-        content: `⏳ J'viens de le rouster, j'ai pas la voix pour deux. Reviens dans **${cd.remainingSec}s**.`,
+        content: `⏳ J'viens de le rouster, j'ai pas la voix pour deux. Reviens dans **${cd.remaining}**.`,
         embeds: [],
         components: [],
       });
