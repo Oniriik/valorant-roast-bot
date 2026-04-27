@@ -194,6 +194,33 @@ async function executeRoast(
       allowedMentions: { users: [account.discord_user_id] },
     });
 
+    // mark these matches as already roasted so the auto-tick doesn't re-roast them
+    // 1. insert any not-yet-stored fetched matches into DB (idempotent)
+    // 2. reset pending_match_count to 0
+    // 3. update last_match_id to the most recent
+    try {
+      const matchIds = storedMatches.map((m) => m.meta.id);
+      const existing = await deps.repo.existingMatchIds(account.id, matchIds);
+      const sortedAsc = [...storedMatches].sort(
+        (a, b) =>
+          new Date(a.meta.started_at).getTime() - new Date(b.meta.started_at).getTime(),
+      );
+      let lastId = account.last_match_id ?? "";
+      for (const m of sortedAsc) {
+        lastId = m.meta.id;
+        if (existing.has(m.meta.id)) continue;
+        const e = mmrIdx.get(m.meta.id);
+        const s = summarizeStoredMatch(m, e?.rrChange ?? null, e?.rankPatched ?? null);
+        await deps.repo.insertMatch(account.id, m.meta.id, s.played_at, s);
+      }
+      await deps.repo.updateAccountAfterMatch(account.id, lastId, 0);
+    } catch (e) {
+      logger.warn("/roast: failed to mark matches as roasted", {
+        acc: account.id,
+        err: String(e),
+      });
+    }
+
     return { ok: true };
   } catch (e) {
     logger.error("/roast failed", { err: String(e) });
