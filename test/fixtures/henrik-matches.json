@@ -1,0 +1,109 @@
+{
+  "status": 200,
+  "data": [
+    {
+      "metadata": {
+        "matchid": "match-aaaaaaaa-1111-2222-3333-aaaaaaaaaaaa",
+        "map": "Ascent",
+        "mode": "Competitive",
+        "mode_id": "competitive",
+        "queue": "Competitive",
+        "game_start": 1735000000,
+        "game_length": 2400000,
+        "rounds_played": 22
+      },
+      "players": {
+        "all_players": [
+          {
+            "puuid": "puuid-target-001",
+            "name": "TestPlayer",
+            "tag": "EUW",
+            "team": "Red",
+            "character": "Jett",
+            "stats": {
+              "score": 4400,
+              "kills": 18,
+              "deaths": 14,
+              "assists": 4,
+              "headshots": 30,
+              "bodyshots": 60,
+              "legshots": 10
+            }
+          },
+          {
+            "puuid": "puuid-other-002",
+            "name": "Other",
+            "tag": "EUW",
+            "team": "Blue",
+            "character": "Sage",
+            "stats": {
+              "score": 3300,
+              "kills": 12,
+              "deaths": 16,
+              "assists": 6,
+              "headshots": 20,
+              "bodyshots": 70,
+              "legshots": 10
+            }
+          }
+        ]
+      },
+      "teams": {
+        "red": { "has_won": true, "rounds_won": 13, "rounds_lost": 9 },
+        "blue": { "has_won": false, "rounds_won": 9, "rounds_lost": 13 }
+      }
+    },
+    {
+      "metadata": {
+        "matchid": "match-bbbbbbbb-1111-2222-3333-bbbbbbbbbbbb",
+        "map": "Bind",
+        "mode": "Competitive",
+        "mode_id": "competitive",
+        "queue": "Competitive",
+        "game_start": 1735086400,
+        "game_length": 2100000,
+        "rounds_played": 18
+      },
+      "players": {
+        "all_players": [
+          {
+            "puuid": "puuid-target-001",
+            "name": "TestPlayer",
+            "tag": "EUW",
+            "team": "Blue",
+            "character": "Reyna",
+            "stats": {
+              "score": 2700,
+              "kills": 11,
+              "deaths": 19,
+              "assists": 2,
+              "headshots": 15,
+              "bodyshots": 75,
+              "legshots": 10
+            }
+          },
+          {
+            "puuid": "puuid-enemy-003",
+            "name": "Enemy",
+            "tag": "EUW",
+            "team": "Red",
+            "character": "Phoenix",
+            "stats": {
+              "score": 4100,
+              "kills": 22,
+              "deaths": 11,
+              "assists": 3,
+              "headshots": 35,
+              "bodyshots": 55,
+              "legshots": 10
+            }
+          }
+        ]
+      },
+      "teams": {
+        "red": { "has_won": true, "rounds_won": 13, "rounds_lost": 5 },
+        "blue": { "has_won": false, "rounds_won": 5, "rounds_lost": 13 }
+      }
+    }
+  ]
+}
